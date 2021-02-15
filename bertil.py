@@ -7,6 +7,12 @@ import argparse
 import os
 import random
 from metno_locationforecast import Place, Forecast
+import random
+import giphy_client
+from giphy_client.rest import ApiException
+
+giphy_token = 'api_key'
+api_instance = giphy_client.DefaultApi()
 
 UMEA = "http://www8.tfe.umu.se/weatherold/fattig.asp"
 
@@ -15,6 +21,18 @@ def main(args):
     sikea_forecast = Forecast(lingus, "metno-locationforecast/1.0 https://github.com/apptitlig")
 
     start_discord_listener(args.api_key, args.channel, sikea_forecast)
+
+async def search_gifs(query):
+    try:
+        response = api_instance.gifs_search_get(giphy_token,
+            query, limit=10, rating='g')
+        lst = list(response.data)
+        gif = random.choices(lst)
+
+        return gif[0].url
+
+    except ApiException as e:
+        return "Exception when calling DefaultApi->gifs_search_get: %s\n" % e
 
 
 def start_discord_listener(api_key, subscribed_channels, sikea_forecast):
@@ -33,17 +51,28 @@ def start_discord_listener(api_key, subscribed_channels, sikea_forecast):
         if str(message.channel) not in subscribed_channels:
             logging.debug(f"Ignoring message sent in channel other than {subscribed_channels}.")
             return
+        supercold = ["antarctica", "polarbear", "blizzard", "snow dog"]
+        somewhatcold = ["cold", "freezing", "brrr", "skiing", "snowmobile", "ice ice baby", "ice king", "gunther", "titanic", "winter", "olaf", "snowflake"]
+        spring = ["thaw", "spring", "flower bud", "park"]
 
         patterns = re.findall("v[v]*ä[ä]*d[d]*e[e]*r[r]*", message.content.lower())
 
         if len(patterns) > 0:
 
             data_umea = requests.get(UMEA)
+           
+            degree_umea = data_umea.content.split()[244][8:][:-1]
 
-            degree_umea = data_umea.content.split()[244][8:][:4] 
             sikea_forecast.update()
-          
-            await message.channel.send(f"Umeå: " + degree_umea.decode("utf-8") + "\nSikeå: " + str(sikea_forecast.data.intervals[0].variables["air_temperature"].value))
+            gif = ""
+            if (sikea_forecast.data.intervals[0].variables["air_temperature"].value < -11):
+                gif = await search_gifs(random.choice(supercold))
+            elif (sikea_forecast.data.intervals[0].variables["air_temperature"].value < 0):
+                gif = await search_gifs(random.choice(somewhatcold))
+            else:
+                gif = await search_gifs(random.choice(spring))
+
+            await message.channel.send(f"Umeå: " + degree_umea.decode("utf-8") + "\nSikeå: " + str(sikea_forecast.data.intervals[0].variables["air_temperature"].value) +"\n" +  str(gif))
 
     client.run(api_key)
 
