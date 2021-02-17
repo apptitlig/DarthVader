@@ -62,8 +62,8 @@ def start_discord_listener(api_key, subscribed_channels, sikea_forecast):
             data_umea = requests.get(UMEA)
            
             degree_umea = data_umea.content.split()[244][8:][:-1]
-
             sikea_forecast.update()
+          
             gif = ""
             if (sikea_forecast.data.intervals[0].variables["air_temperature"].value < -11):
                 gif = await search_gifs(random.choice(supercold))
