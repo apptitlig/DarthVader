@@ -10,11 +10,10 @@ from metno_locationforecast import Place, Forecast
 import random
 import giphy_client
 from giphy_client.rest import ApiException
+import xml.etree.ElementTree as ET
 
-giphy_token = 'api_key'
+giphy_token = 'x'
 api_instance = giphy_client.DefaultApi()
-
-UMEA = "http://www8.tfe.umu.se/weatherold/fattig.asp"
 
 def main(args):
     lingus = Place("Lingus", 64.1659735, 20.9219466, 15)
@@ -59,9 +58,10 @@ def start_discord_listener(api_key, subscribed_channels, sikea_forecast):
 
         if len(patterns) > 0:
 
-            data_umea = requests.get(UMEA)
-           
-            degree_umea = data_umea.content.split()[244][8:][:-1]
+            data_umea = requests.get("http://www8.tfe.umu.se/vadertjanst/service1.asmx/Temp")
+            root = ET.fromstring(data_umea.content)
+            
+            degree_umea = root.text
             sikea_forecast.update()
           
             gif = ""
@@ -72,7 +72,7 @@ def start_discord_listener(api_key, subscribed_channels, sikea_forecast):
             else:
                 gif = await search_gifs(random.choice(spring))
 
-            await message.channel.send(f"Umeå: " + degree_umea.decode("utf-8") + "\nSikeå: " + str(sikea_forecast.data.intervals[0].variables["air_temperature"].value) +"\n" +  str(gif))
+            await message.channel.send(f"Umeå: " + str(degree_umea) + "\nSikeå: " + str(sikea_forecast.data.intervals[0].variables["air_temperature"].value) +"\n" +  str(gif))
 
     client.run(api_key)
 
