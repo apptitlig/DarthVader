@@ -118,7 +118,7 @@ def start_discord_listener(api_key, api_key_giphy, subscribed_channels, sikea_fo
             else:
                  search_string = random.choice(spring)
 
-            gif = await search_gifs(random.choice(search_string), api_key_giphy)
+            gif = await search_gifs(search_string, api_key_giphy)
 
             await message.channel.send(f"Umeå: " + str(degree_umea) + "\nSikeå: " + str(sikea_forecast.data.intervals[0].variables["air_temperature"].value) +"\n" +  str(gif))
 
