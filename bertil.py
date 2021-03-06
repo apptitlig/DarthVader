@@ -35,10 +35,15 @@ async def search_gifs(query, api_key_giphy):
     except ApiException as e:
         return "Exception when calling DefaultApi->gifs_search_get: %s\n" % e
 
+async def dot_aligned(seq):
+    snums = [str(seq)]
+    dots = [s.find('.') for s in snums]
+    return [' '*(3 - d) + s for s, d in zip(snums, dots)]
+
 async def prognos(forecast):
     forecast.update()
 
-    forecast_string = "```Tid             Temp Nederbörd Blåst\n";
+    forecast_string = "```Tid            Temp   Blåst Nederbörd\n";
 
     for i in range(5):
         time0 = str(forecast.data.intervals[i])[28:][:5] 
@@ -46,14 +51,16 @@ async def prognos(forecast):
 
         temp  = forecast.data.intervals[i].variables["air_temperature"].value
         nb    = forecast.data.intervals[i].variables["precipitation_amount"].value
-        blast    = forecast.data.intervals[i].variables["precipitation_amount"].value
+        blast    = forecast.data.intervals[i].variables["wind_speed"].value
 
-        forecast_string = forecast_string + str(time0) + " - " + str(time1) + ": "  + str(temp) + "  " + str(nb) + "       " + str(blast) + "\n" 
-   
+        alignedtemp = await dot_aligned(temp)
+
+        forecast_string = forecast_string + str(time0) + " - " + str(time1) + ": "  + '{:7}'.format(str(alignedtemp[0])) + '{:6}'.format(str(blast))  + str(nb) + "\n" 
+
     temp  = forecast.data.intervals[0].variables["air_temperature"].value
     nb    = forecast.data.intervals[0].variables["precipitation_amount"].value
-    blast    = forecast.data.intervals[0].variables["precipitation_amount"].value
-    time = str(forecast.data.intervals[i])[28:][:2]
+    blast = forecast.data.intervals[0].variables["wind_speed"].value
+    time  = str(forecast.data.intervals[i])[28:][:2]
 
 
     emoji = ''
@@ -61,13 +68,13 @@ async def prognos(forecast):
         emoji = emoji + random.choice([":cloud_snow:", ":snowflake:", ":snowman:", ":snowman2:"])
     if (temp > 0 and nb > 0):
         emoji = emoji + random.choice([":cloud_rain:", ":white_sun_rain_cloud:", ":umbrella:", ":umbrella2:"])
-    if (blast >= 0.3):
+    if (blast >= 4):
         emoji = emoji + random.choice([":dash:", ":wind_blowing_face:"])
-    if (blast > 1):
+    if (blast > 14):
         emoji = emoji + ":cloud_tornado:"
     if (temp > 10):
         emoji = emoji + random.choice([":sunny:", ":white_sun_small_cloud:"])
-    if(int(time) > 22 and int(time) < 6):
+    if(int(time) > 22 or int(time) < 6):
         emoji = emoji + random.choice([":star:", ":star2:"])
 
     if emoji == "":
@@ -94,9 +101,10 @@ def start_discord_listener(api_key, api_key_giphy, subscribed_channels, sikea_fo
         if str(message.channel) not in subscribed_channels:
             logging.debug(f"Ignoring message sent in channel other than {subscribed_channels}.")
             return
+            
         supercold = ["antarctica", "polarbear", "blizzard", "snow dog", "icy", "polar"]
         somewhatcold = ["cold", "freezing", "brrr", "skiing", "snowmobile", "ice ice baby", "ice king", "gunther", "titanic", "winter", "olaf", "snowflake", "frost", "chill", "below zero"]
-        spring = ["thaw", "spring", "flower bud", "park"]
+        spring = ["thaw", "spring", "flower bud", "daffodil", "butterfly", "tulip", "puddles", "kid (baby goat)", "daisy", "bird nest" ]
 
         patternsVader = re.findall("v[v]*ä[ä]*d[d]*e[e]*r[r]*", message.content.lower())
         patternsVadret = re.findall("v[v]*ä[ä]*d[d]*r[r]*e[e]*t[t]*", message.content.lower())
