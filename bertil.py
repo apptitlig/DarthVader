@@ -11,10 +11,15 @@ import random
 import giphy_client
 from giphy_client.rest import ApiException
 import xml.etree.ElementTree as ET
+import datetime as dt
+import statistics as s
+import locale
+import calendar
 
 api_instance = giphy_client.DefaultApi()
 
 def main(args):
+    
     lingus = Place("Lingus", 64.1659735, 20.9219466, 15)    
     sikea_forecast = Forecast(lingus, "metno-locationforecast/1.0 https://github.com/apptitlig")
 
@@ -26,7 +31,7 @@ def main(args):
 async def search_gifs(query, api_key_giphy):
     try:
         response = api_instance.gifs_search_get(api_key_giphy,
-            query, limit=10, rating='g')
+            query, limit=5, rating='g')
         lst = list(response.data)
         gif = random.choices(lst)
 
@@ -38,30 +43,126 @@ async def search_gifs(query, api_key_giphy):
 async def dot_aligned(seq):
     snums = [str(seq)]
     dots = [s.find('.') for s in snums]
-    return [' '*(3 - d) + s for s, d in zip(snums, dots)]
+    return [' '*(3 - d) + s for s, d in zip(snums, dots)][0]
 
+async def forecastDay(f,days, i):
+
+    temp, nb, blast, start, end = await getValuesWithList(f, i)
+
+    alignedtemp = await dot_aligned(temp)
+    
+    forecast_string = start +  " - " + end + ": "  + '{:7}'.format(str(alignedtemp)) + '{:6}'.format(str(blast))  + str(nb) + "\n" 
+    return forecast_string
+
+async def forecast1day(f, days, start, end):
+    temp = 0
+    nb = 0
+    blast = 0
+    time0 = f[start].start_time
+    time1 = f[end].end_time
+    
+    for j in range(start, end):
+        temp1, nb1, blast1, _, _ = await getValuesWithList(f, j)
+
+        temp = temp + temp1 
+        nb = nb + nb1
+        blast = blast + blast1
+
+    temp = temp/(end - start)
+    nb = nb/(end - start)
+    blast = blast/(end - start)
+
+    alignedtemp = await dot_aligned(temp)
+    
+    forecast_string = str(time0.time())[0:5] +  " - " + str(time1.time())[0:5] + ": "  + "{:5.1f}".format(float(alignedtemp)) + "{:5.1f}".format(blast)  + "   " + str(nb) + "\n" 
+    return forecast_string
+
+async def minMaxDay(f):
+    min = f[0].variables["air_temperature"].value 
+    max = f[0].variables["air_temperature"].value 
+
+    for i in range(len(f)):
+        t = f[i].variables["air_temperature"].value
+        if t > max:
+            max = t
+        if t < min:
+            min = t
+
+    alignedmax = await dot_aligned(max)
+    alignedmin = await dot_aligned(min)
+    return str(alignedmin) + "  " + str(alignedmax)
+
+async def getValuesWithList(forecast, i):
+    temp  = forecast[i].variables["air_temperature"].value
+    nb    = forecast[i].variables["precipitation_amount"].value
+    blast = forecast[i].variables["wind_speed"].value 
+    start = forecast[i].start_time
+    end = forecast[i].end_time 
+
+    return temp, nb, blast, str(start.time())[0:5], str(end.time())[0:5]
+
+
+async def getValuesWithData(forecast, i):
+    temp  = forecast.data.intervals[i].variables["air_temperature"].value
+    nb    = forecast.data.intervals[i].variables["precipitation_amount"].value
+    blast = forecast.data.intervals[i].variables["wind_speed"].value 
+    start = forecast.data.intervals[i].start_time
+    end = forecast.data.intervals[i].end_time 
+
+    return temp, nb, blast, str(start.time())[0:5], str(end.time())[0:5]
+
+async def addWeekday(days):
+    locale.setlocale(locale.LC_ALL, 'sv_SE')
+
+    d = calendar.day_name[days.weekday()]
+
+    return '{:7}'.format(str(d))
+
+async def prognosMinMax(forecast, length):
+    forecast.update()
+    forecast_string = "```Dag           Min    Max \n";
+    
+    for i in range(1, length+1):
+      
+        days = dt.date.today() + dt.timedelta(days=i)
+        f = forecast.data.intervals_for(days)
+        day = f[0].start_time 
+    
+        forecast_string = forecast_string + str(day.day) +  " " + await addWeekday(days) + "  " +  await minMaxDay(f)
+        forecast_string = forecast_string + "\n"
+
+    return forecast_string + "```"
+
+async def prognosN(forecast, length):
+    forecast.update()
+    forecast_string = "```Tid            Temp   Blåst Nederbörd\n";
+    
+    for i in range(1, length+1):
+        days = dt.date.today() + dt.timedelta(days=i)
+        f = forecast.data.intervals_for(days)
+        
+        forecast_string = forecast_string + await addWeekday(days) + "\n"
+        if i == 1:
+            forecast_string = forecast_string + await forecast1day(f, days, 0, 5) + await forecast1day(f,days, 6, 11) + await forecast1day(f,days, 12, 17) + await forecast1day(f,days, 18, 23)  
+        else:
+            forecast_string = forecast_string + await forecastDay(f, days, 0) + await forecastDay(f, days, 1) + await forecastDay(f, days, 2) + await forecastDay(f,days, 3)  
+        forecast_string = forecast_string + "\n"
+
+    return forecast_string + "```"
+         
 async def prognos(forecast):
     forecast.update()
 
     forecast_string = "```Tid            Temp   Blåst Nederbörd\n";
 
     for i in range(5):
-        time0 = str(forecast.data.intervals[i])[28:][:5] 
-        time1 = str(forecast.data.intervals[i])[52:][:5] 
-
-        temp  = forecast.data.intervals[i].variables["air_temperature"].value
-        nb    = forecast.data.intervals[i].variables["precipitation_amount"].value
-        blast    = forecast.data.intervals[i].variables["wind_speed"].value
+        temp, nb, blast, start, end = await getValuesWithData(forecast, i)
 
         alignedtemp = await dot_aligned(temp)
 
-        forecast_string = forecast_string + str(time0) + " - " + str(time1) + ": "  + '{:7}'.format(str(alignedtemp[0])) + '{:6}'.format(str(blast))  + str(nb) + "\n" 
+        forecast_string = forecast_string + start +  " - " + end + ": "  + '{:7}'.format(str(alignedtemp)) + '{:6}'.format(str(blast))  + str(nb) + "\n" 
 
-    temp  = forecast.data.intervals[0].variables["air_temperature"].value
-    nb    = forecast.data.intervals[0].variables["precipitation_amount"].value
-    blast = forecast.data.intervals[0].variables["wind_speed"].value
-    time  = str(forecast.data.intervals[i])[28:][:2]
-
+    temp, nb, blast, start, end = await getValuesWithData(forecast, 0)
 
     emoji = ''
     if (temp < 0 and nb > 0):
@@ -79,7 +180,6 @@ async def prognos(forecast):
 
     if emoji == "":
         emoji = ":rainbow:"
-
 
     forecast_string = forecast_string + "```\n" + emoji
 
@@ -134,20 +234,28 @@ def start_discord_listener(api_key, api_key_giphy, subscribed_channels, sikea_fo
         patternsSikea = re.findall("prognos s", message.content.lower())
 
         if len(patternsSikea) > 0:
-           ans =  await prognos(sikea_forecast)
-           await message.channel.send(ans)
+            ans =  await prognos(sikea_forecast)
+            await message.channel.send(ans)
 
         patternsUmea = re.findall("prognos u", message.content.lower())
 
         if len(patternsUmea) > 0:
-           ans =  await prognos(umea_forecast)
-           await message.channel.send(ans)
 
+            ans =  await prognos(umea_forecast)
+            await message.channel.send(ans)
 
+        patternsN = re.findall("prognos [1-9][1-9]*", message.content.lower())
 
+        if len(patternsN) > 0:
+            splitmessage = message.content.lower().split()
+            days = int(splitmessage[1])
+            if days < 5:
+                ans =  await prognosN(umea_forecast, days)
+            else:
+                ans =  await prognosMinMax(umea_forecast, days)
+            await message.channel.send(ans)
 
     client.run(api_key)
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description="A Discord Ume weather bot ")
