@@ -26,7 +26,10 @@ def main(args):
     umea = Place("Umee", 63.8390388, 20.3381108, 16)    
     umea_forecast = Forecast(umea, "metno-locationforecast/1.0 https://github.com/apptitlig")
 
-    start_discord_listener(args.api_key, args.api_key_giphy, args.channel, sikea_forecast, umea_forecast)
+    mittemellan = Place("mittemellan", 63.9262669, 20.4252715, 16)    
+    mittemellan_forecast = Forecast(umea, "metno-locationforecast/1.0 https://github.com/apptitlig")
+
+    start_discord_listener(args.api_key, args.api_key_giphy, args.channel, sikea_forecast, umea_forecast, mittemellan_forecast)
 
 async def search_gifs(query, api_key_giphy):
     try:
@@ -46,13 +49,24 @@ async def dot_aligned(seq):
     return [' '*(3 - d) + s for s, d in zip(snums, dots)][0]
 
 async def forecastDay(f,days, i):
-
     temp, nb, blast, start, end = await getValuesWithList(f, i)
 
     alignedtemp = await dot_aligned(temp)
     
     forecast_string = start +  " - " + end + ": "  + '{:7}'.format(str(alignedtemp)) + '{:6}'.format(str(blast))  + str(nb) + "\n" 
     return forecast_string
+
+async def forecast2day(f, days, time):
+    time0 = f[time].start_time
+    time1 = f[time].end_time
+    
+    temp, nb, blast, _, _ = await getValuesWithList(f, time)
+
+    alignedtemp = await dot_aligned(temp)
+    
+    forecast_string = str(time0.time())[0:5] +  " - " + str(time1.time())[0:5] + ": "  + "{:5.1f}".format(float(alignedtemp)) + "{:5.1f}".format(blast)  + "   " + str(nb) + "\n" 
+    return forecast_string
+
 
 async def forecast1day(f, days, start, end):
     temp = 0
@@ -90,7 +104,7 @@ async def minMaxDay(f):
 
     alignedmax = await dot_aligned(max)
     alignedmin = await dot_aligned(min)
-    return str(alignedmin) + "  " + str(alignedmax)
+    return '{:10}'.format(str(alignedmin) + "  " + str(alignedmax))
 
 async def getValuesWithList(forecast, i):
     temp  = forecast[i].variables["air_temperature"].value
@@ -112,15 +126,14 @@ async def getValuesWithData(forecast, i):
     return temp, nb, blast, str(start.time())[0:5], str(end.time())[0:5]
 
 async def addWeekday(days):
-    locale.setlocale(locale.LC_ALL, 'sv_SE')
 
     d = calendar.day_name[days.weekday()]
 
-    return '{:7}'.format(str(d))
+    return '{:9}'.format(str(d))
 
 async def prognosMinMax(forecast, length):
     forecast.update()
-    forecast_string = "```Dag           Min    Max \n";
+    forecast_string = "```Dag             Min    Max \n";
     
     for i in range(1, length+1):
       
@@ -142,8 +155,12 @@ async def prognosN(forecast, length):
         f = forecast.data.intervals_for(days)
         
         forecast_string = forecast_string + await addWeekday(days) + "\n"
-        if i == 1:
-            forecast_string = forecast_string + await forecast1day(f, days, 0, 5) + await forecast1day(f,days, 6, 11) + await forecast1day(f,days, 12, 17) + await forecast1day(f,days, 18, 23)  
+        if len(f) == 24:
+            forecast_string = forecast_string + await forecast1day(f, days, 0, 5) + await forecast1day(f, days, 6, 11) + await forecast1day(f ,days, 12, 17) + await forecast1day(f, days, 18, 23)  
+        elif len(f) == 19:
+            forecast_string = forecast_string + await forecast1day(f, days, 0, 5) + await forecast1day(f, days, 6, 11) + await forecast1day(f ,days, 12, 17) + await forecast2day(f, days, 18) 
+        elif len(f) == 14:
+            forecast_string = forecast_string + await forecast1day(f, days, 0, 5) + await forecast1day(f, days, 6, 11) + await forecast2day(f, days, 12) + await forecast2day(f, days, 13) 
         else:
             forecast_string = forecast_string + await forecastDay(f, days, 0) + await forecastDay(f, days, 1) + await forecastDay(f, days, 2) + await forecastDay(f,days, 3)  
         forecast_string = forecast_string + "\n"
@@ -152,40 +169,43 @@ async def prognosN(forecast, length):
          
 async def prognos(forecast):
     forecast.update()
-
     forecast_string = "```Tid            Temp   Blåst Nederbörd\n";
 
     for i in range(5):
         temp, nb, blast, start, end = await getValuesWithData(forecast, i)
-
         alignedtemp = await dot_aligned(temp)
-
         forecast_string = forecast_string + start +  " - " + end + ": "  + '{:7}'.format(str(alignedtemp)) + '{:6}'.format(str(blast))  + str(nb) + "\n" 
 
     temp, nb, blast, start, end = await getValuesWithData(forecast, 0)
+    time = int(start[0:2])
+    symbol = forecast.data.intervals[0].symbol_code
 
     emoji = ''
-    if (temp < 0 and nb > 0):
-        emoji = emoji + random.choice([":cloud_snow:", ":snowflake:", ":snowman:", ":snowman2:"])
-    if (temp > 0 and nb > 0):
-        emoji = emoji + random.choice([":cloud_rain:", ":white_sun_rain_cloud:", ":umbrella:", ":umbrella2:"])
+    if (symbol == 'cloudy'):
+        emoji = emoji + random.choice([":cloud: "]) 
+    if (symbol == 'clearsky' or symbol == 'fair' or symbol == "clearsky_day"):
+        emoji = emoji + random.choice([":sun_with_face: ", ":sunny: "]) 
+    if (symbol == 'fog'):
+        emoji = emoji + random.choice([":fog: "]) 
+    if (symbol.find('rain') > 1 or symbol.find('sleet') > 1):
+        emoji = emoji + random.choice([":rain_cloud: ", ":white_sun_rain_cloud: "]) 
+    if (symbol.find('thunder') > 1):
+        emoji = emoji + random.choice([":cloud_lightning: "]) 
+    if (symbol.find('snow') > 1):
+        emoji = emoji + random.choice([":cloud_snow: ", ":snowflake: ",":snowman: ", ":snowman2: "]) 
+    if (symbol.find('night') > 1):
+        emoji = emoji + random.choice([":star:", ":star2:"])
+
     if (blast >= 4):
         emoji = emoji + random.choice([":dash:", ":wind_blowing_face:"])
     if (blast > 14):
         emoji = emoji + ":cloud_tornado:"
-    if (temp > 10):
-        emoji = emoji + random.choice([":sunny:", ":white_sun_small_cloud:"])
-    if(int(time) > 22 or int(time) < 6):
-        emoji = emoji + random.choice([":star:", ":star2:"])
-
-    if emoji == "":
-        emoji = ":rainbow:"
 
     forecast_string = forecast_string + "```\n" + emoji
 
     return forecast_string
 
-def start_discord_listener(api_key, api_key_giphy, subscribed_channels, sikea_forecast, umea_forecast):
+def start_discord_listener(api_key, api_key_giphy, subscribed_channels, sikea_forecast, umea_forecast, mittemellan_forecast):
     client = discord.Client()
 
     @client.event
@@ -250,9 +270,9 @@ def start_discord_listener(api_key, api_key_giphy, subscribed_channels, sikea_fo
             splitmessage = message.content.lower().split()
             days = int(splitmessage[1])
             if days < 5:
-                ans =  await prognosN(umea_forecast, days)
+                ans =  await prognosN(mittemellan_forecast, days)
             else:
-                ans =  await prognosMinMax(umea_forecast, days)
+                ans =  await prognosMinMax(mittemellan_forecast, days)
             await message.channel.send(ans)
 
     client.run(api_key)
