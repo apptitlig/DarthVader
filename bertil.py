@@ -18,6 +18,8 @@ import calendar
 
 api_instance = giphy_client.DefaultApi()
 
+
+
 def main(args):
     
     lingus = Place("Lingus", 64.1659735, 20.9219466, 15)    
@@ -29,7 +31,7 @@ def main(args):
     mittemellan = Place("mittemellan", 63.9262669, 20.4252715, 16)    
     mittemellan_forecast = Forecast(umea, "metno-locationforecast/1.0 https://github.com/apptitlig")
 
-    start_discord_listener(args.api_key, args.api_key_giphy, args.channel, sikea_forecast, umea_forecast, mittemellan_forecast)
+    start_discord_listener(args.api_key, args.api_key_giphy, args.channel, args.user, sikea_forecast, umea_forecast, mittemellan_forecast)
 
 async def search_gifs(query, api_key_giphy):
     try:
@@ -37,11 +39,16 @@ async def search_gifs(query, api_key_giphy):
             query, limit=5, rating='g')
         lst = list(response.data)
         gif = random.choices(lst)
-
         return gif[0].url
 
     except ApiException as e:
         return "Exception when calling DefaultApi->gifs_search_get: %s\n" % e
+    except IndexError as e:
+        response = api_instance.gifs_search_get(api_key_giphy,
+            "possum", limit=5, rating='g')
+        lst = list(response.data)
+        gif = random.choices(lst)
+        return gif[0].url
 
 async def dot_aligned(seq):
     snums = [str(seq)]
@@ -205,8 +212,10 @@ async def prognos(forecast):
 
     return forecast_string
 
-def start_discord_listener(api_key, api_key_giphy, subscribed_channels, sikea_forecast, umea_forecast, mittemellan_forecast):
+def start_discord_listener(api_key, api_key_giphy, subscribed_channels, user, sikea_forecast, umea_forecast, mittemellan_forecast):
     client = discord.Client()
+    global points 
+    points = 10
 
     @client.event
     async def on_ready():
@@ -229,8 +238,22 @@ def start_discord_listener(api_key, api_key_giphy, subscribed_channels, sikea_fo
         patternsVader = re.findall("v[v]*ä[ä]*d[d]*e[e]*r[r]*", message.content.lower())
         patternsVadret = re.findall("v[v]*ä[ä]*d[d]*r[r]*e[e]*t[t]*", message.content.lower())
         patternsVadur = re.findall("v[v]*ä[ä]*d[d]*u[u]*r[r]*", message.content.lower())
+        global points 
+        if (str(message.author) == str(user[0]) and (points > 5)):
+            isprognosorvader = message.content.split()[0].lower()
+            
+            if ((isprognosorvader == "prognos") and (len( message.content.split()) > 1 ) ):
+                tosearchfor = message.content.split()[1].lower()
+                if(tosearchfor != "umeå" and tosearchfor != "sikeå" and tosearchfor != "u" and tosearchfor != "s"):
+                    gif = await search_gifs(tosearchfor, api_key_giphy)
+                    
+                    await message.channel.send(str(gif))
+                    points = points - 5
 
+        
         if len(patternsVader) > 0 or len(patternsVadret) > 0 or len(patternsVadur) > 0 :
+
+            points = points + 2
 
             data_umea = requests.get("http://www8.tfe.umu.se/vadertjanst/service1.asmx/Temp")
             root = ET.fromstring(data_umea.content)
@@ -254,19 +277,21 @@ def start_discord_listener(api_key, api_key_giphy, subscribed_channels, sikea_fo
         patternsSikea = re.findall("prognos s", message.content.lower())
 
         if len(patternsSikea) > 0:
+            points = points + 2
             ans =  await prognos(sikea_forecast)
             await message.channel.send(ans)
 
         patternsUmea = re.findall("prognos u", message.content.lower())
 
         if len(patternsUmea) > 0:
-
+            points = points + 2
             ans =  await prognos(umea_forecast)
             await message.channel.send(ans)
 
         patternsN = re.findall("prognos [1-9][1-9]*", message.content.lower())
 
         if len(patternsN) > 0:
+            points = points + 2
             splitmessage = message.content.lower().split()
             days = int(splitmessage[1])
             if days < 5:
@@ -289,6 +314,10 @@ def parse_args():
                         action="append",
                         help="A channel which Berit listens in. May be supplied multiple times.",
                         required=True)
+    parser.add_argument("--user",
+                        action="append",
+                        help="A user to joke with.",
+                        required=True)                    
 
     args = parser.parse_args()
     if args.api_key is None:
